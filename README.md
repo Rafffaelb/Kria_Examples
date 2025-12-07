@@ -1,6 +1,6 @@
 # Kria_Examples
 
-This repository contains various examples demonstrating hardware-software co-design concepts using AMD/Xilinx Kria SoCs, focusing on communication between processing systems and programmable logic.
+This repository provides comprehensive examples demonstrating various aspects of hardware-software co-design using AMD/Xilinx Kria SoCs. While the primary focus is on sharing Block RAM (BRAM) between the Processing System (PS) and MicroBlaze processor, the repository also includes examples covering I2C communication, interrupt handling, and multi-processor coordination.
 
 ## Table of Contents
 - [Overview](#overview)
