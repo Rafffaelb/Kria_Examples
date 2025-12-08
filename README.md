@@ -1,120 +1,154 @@
-# Kria_Examples
+# Workflow para Execução dos Exemplos Kria
 
-This repository provides comprehensive examples demonstrating various aspects of hardware-software co-design using AMD/Xilinx Kria SoCs. While the primary focus is on sharing Block RAM (BRAM) between the Processing System (PS) and MicroBlaze processor, the repository also includes examples covering I2C communication, interrupt handling, and multi-processor coordination.
+Este documento descreve o fluxo de trabalho para executar os exemplos Kria, incluindo a geração do design de hardware usando scripts TCL no Vivado e a implementação do software correspondente no Xilinx Vitis.
 
-## Table of Contents
-- [Overview](#overview)
-- [Examples](#examples)
-  - [I2C](#i2c-example)
-  - [INTC_IIC](#intc_iic-example)
-  - [INTC_IIC_uB](#intc_iic_ub-example)
-  - [SharedBram_Example](#sharedbram_example)
-- [Directory Structure](#directory-structure)
-- [Getting Started](#getting-started)
-- [Prerequisites](#prerequisites)
+## Pré-requisitos
 
-## Overview
-
-These examples demonstrate key concepts in embedded system design using Xilinx Kria SoCs including:
-- I2C communication with sensors
-- Interrupt handling
-- Hardware-software integration
-- Shared memory between processors
-- MicroBlaze soft processor usage
-
-Each example includes both Vitis (software) and Vivado (hardware) components.
-
-## Examples
-
-### I2C Example
-
-Demonstrates basic I2C communication with the ADXL345 accelerometer sensor. This example initializes the sensor and continuously reads acceleration values from the X, Y, and Z axes, displaying them via UART.
-
-Key components:
-- ADXL345 accelerometer driver
-- I2C communication protocol
-- Real-time data display
-
-### INTC_IIC Example
-
-Extends the I2C example by incorporating interrupt handling through the Xilinx Interrupt Controller (INTC). Rather than polling the sensor, this example uses interrupts to trigger data readings, which is more efficient for event-driven applications.
-
-Features:
-- Interrupt-based I2C communication
-- Xilinx Interrupt Controller (INTC) integration
-- Exception handling
-
-### INTC_IIC_uB Example
-
-Combines the interrupt-driven I2C communication with shared memory concepts. This example uses a MicroBlaze soft processor to read data from the ADXL345 sensor and store it in a shared AXI BRAM (Block RAM) that can be accessed by other processors.
-
-Architecture:
-- MicroBlaze processor for sensor data acquisition
-- AXI BRAM for shared memory storage
-- I2C communication with ADXL345
-
-### SharedBram_Example
-
-Demonstrates sharing data between processors using AXI Block RAM (BRAM). In this example, one processor writes data to the BRAM while another reads from it, showcasing inter-processor communication mechanisms.
-
-Implementation:
-- Dual processor communication
-- Shared memory concept using AXI BRAM
-- Hardware/software co-design
-
-## Directory Structure
-
-```
-├── I2C/
-│   ├── Vitis/           # Software sources for I2C example
-│   │   ├── ADXL345.cpp  # ADXL345 accelerometer driver implementation
-│   │   ├── ADXL345.h    # ADXL345 driver header
-│   │   ├── axiWire.hpp  # I2C communication library
-│   │   └── example.cpp  # Main application
-│   └── Vivado/          # Hardware design sources
-│       └── design_1.tcl # TCL script for hardware design
-├── INTC_IIC/
-│   ├── Vitis/           # Software sources for interrupt-based I2C example
-│   │   ├── ADXL345.cpp  # ADXL345 accelerometer driver implementation
-│   │   ├── ADXL345.h    # ADXL345 driver header
-│   │   ├── axiWire.hpp  # I2C communication library
-│   │   └── iic_example.cpp # Main application with interrupt handling
-│   └── Vivado/          # Hardware design sources
-│       └── design_1.tcl # TCL script for hardware design
-├── INTC_IIC_uB/
-│   ├── Vitis/
-│   │   ├── cortexa53_app/   # Application for Cortex-A53 processor
-│   │   │   └── main_cortex.cpp
-│   │   └── microblaze_app/  # Application for MicroBlaze processor
-│   │       ├── ADXL345.cpp  # ADXL345 accelerometer driver implementation
-│   │       ├── ADXL345.h    # ADXL345 driver header
-│   │       ├── axiWire.hpp  # I2C communication library
-│   │       └── main_ub.cpp  # Main application for MicroBlaze
-│   └── Vivado/          # Hardware design sources
-│       └── design_1.tcl # TCL script for hardware design
-├── SharedBram_Example/
-│   ├── Vitis/
-│   │   ├── CortexA53-0_app/ # Application for Cortex-A53 processor
-│   │   │   └── cortexa53.c  # Reads data from shared BRAM
-│   │   └── Microblaze_app/  # Application for MicroBlaze processor
-│   │       └── microblaze.c # Writes data to shared BRAM
-│   └── Vivado/          # Hardware design sources
-│       └── design_1.tcl # TCL script for hardware design
-```
-
-## Getting Started
-
-1. Clone this repository
-2. Open the desired example's Vivado directory
-3. Run the TCL script (`design_1.tcl`) in Vivado to regenerate the hardware design
-4. Open the corresponding Vitis directory
-5. Create a new Vitis workspace and import the software projects
-6. Build and run the applications
-
-## Prerequisites
-
-- Xilinx Vivado Design Suite (2020.1 or later recommended)
+Antes de começar, certifique-se de ter instalado:
+- Xilinx Vivado Design Suite (2020.1 ou posterior recomendado)
 - Xilinx Vitis Unified Software Platform
-- AMD/Xilinx Kria KV260/KV240 Starter Kit or compatible development board
-- USB-UART cable for serial communication
-- ADXL345 accelerometer sensor (for I2C examples)
+- Placa de desenvolvimento compatível com Xilinx Kria (KV260/KV240)
+
+## Estrutura do Projeto
+
+Cada exemplo segue esta estrutura:
+```
+Exemplo/
+├── Vivado/
+│   └── design_1.tcl     # Script TCL para geração do design de hardware
+└── Vitis/
+    ├── src/             # Código fonte C/C++
+    └── projeto_vitis/   # Projeto exportado do Vivado (se aplicável)
+```
+
+## Fluxo de Trabalho
+
+### 1. Geração do Design de Hardware (Vivado)
+
+1. Abra o Xilinx Vivado
+2. Execute o script TCL:
+   ```
+   source Kria_Examples/[NOME_EXEMPLO]/Vivado/design_1.tcl
+   ```
+   
+   Ou alternativamente:
+   - File → Source → Navigate to TCL script
+   - Selecione o arquivo `design_1.tcl` do exemplo desejado
+
+3. Após a execução do script, o design será gerado automaticamente
+4. Revise o design conforme necessário
+5. Gere o bitstream:
+   - Flow Navigator → Generate Bitstream
+   - Clique em "Yes" para executar as etapas de síntese e implementação
+
+6. Exporte o hardware para o Vitis:
+   - File → Export → Export Hardware
+   - Selecione "Include bitstream"
+   - Escolha um local para salvar o arquivo `.xsa`
+
+### 2. Configuração do Ambiente de Software (Vitis)
+
+1. Abra o Xilinx Vitis
+2. Crie um novo workspace:
+   - File → Switch Workspace → Other
+   - Selecione ou crie uma pasta para o workspace
+
+3. Importe o hardware:
+   - File → New → Application Project
+   - Na caixa de diálogo "Platform", selecione "Create a new platform from hardware (XSA)"
+   - Navegue até o arquivo `.xsa` gerado no Vivado
+   - Clique em "Next"
+
+4. Configure o projeto:
+   - Nomeie o projeto (ex: i2c_example)
+   - Certifique-se de que "Create a new application" está selecionado
+   - Clique em "Next"
+
+5. Selecione um template (opcional):
+   - Para exemplos simples, você pode escolher "Empty Application"
+   - Clique em "Finish"
+
+### 3. Adicionando Código Fonte
+
+1. No explorador do projeto, expanda a pasta do projeto
+2. Navegue até a pasta "src" (crie se não existir)
+3. Adicione os arquivos de código fonte do exemplo:
+   - Copie os arquivos `.c/.cpp/.h` da pasta `Vitis/src` do exemplo
+   - Cole-os na pasta src do seu projeto no Vitis
+
+4. Para os exemplos ADXL345, certifique-se de incluir:
+   - `ADXL345.cpp` e `ADXL345.h` (driver do sensor)
+   - `axiWire.hpp` (biblioteca de comunicação I2C)
+   - Arquivo principal (`example.cpp`, `iic_example.cpp`, etc.)
+
+### 4. Compilação e Execução
+
+1. Compile o projeto:
+   - Clique com botão direito no projeto → Build Project
+   - Ou clique no ícone "Build" na barra de ferramentas
+
+2. Conecte a placa Kria:
+   - Certifique-se de que a placa está conectada via JTAG
+   - Ligue a placa
+
+3. Programe o dispositivo:
+   - Clique com botão direito no projeto → Run As → Launch Hardware
+   - Ou selecione "Xilinx -> Program Device" na barra de ferramentas
+
+4. Execute o aplicativo:
+   - No explorador, clique com botão direito no ELF file
+   - Selecione "Run As -> Launch on Hardware (System Debugger)"
+
+### 5. Monitoramento e Debugging
+
+1. Para visualizar a saída serial:
+   - Utilize um terminal serial (como TeraTerm ou PuTTY)
+   - Configure a conexão com os parâmetros da porta UART da placa
+   - Velocidade típica: 115200 baud
+
+2. Para debugging:
+   - Defina breakpoints no código
+   - Use as perspectivas de debug do Vitis
+   - Monitore variáveis e registradores conforme necessário
+
+## Notas Específicas por Exemplo
+
+### Exemplo I2C
+- Lê continuamente dados do acelerômetro ADXL345 via I2C
+- Exibe valores X, Y, Z no terminal serial
+- Não utiliza interrupções
+
+### Exemplo INTC_IIC
+- Similar ao exemplo I2C, mas usa interrupções
+- Requer configuração correta do controlador de interrupção (INTC)
+- Mais eficiente em termos de uso da CPU
+
+### Exemplo INTC_IIC_uB
+- Usa MicroBlaze para ler dados do sensor
+- Armazena dados em BRAM compartilhada
+- Requer configuração de dois processadores (Cortex-A53 e MicroBlaze)
+
+### Exemplo SharedBram
+- Demonstra comunicação entre dois processadores via BRAM
+- Um processador escreve dados, outro os lê
+- Útil para entender mecanismos de comunicação inter-processador
+
+## Solução de Problemas
+
+### Problemas Comuns
+
+1. **Falha na geração do bitstream**
+   - Verifique se todas as conexões no design estão corretas
+   - Confirme que todos os IPs necessários estão incluídos
+
+2. **Erros de compilação no Vitis**
+   - Verifique se todos os arquivos de origem foram adicionados corretamente
+   - Confirme se os caminhos das bibliotecas estão configurados
+
+3. **Falha na programação do dispositivo**
+   - Verifique as conexões JTAG
+   - Confirme que a placa está ligada e sendo reconhecida
+
+4. **Nenhuma saída no terminal serial**
+   - Verifique as configurações da porta UART (velocidade, paridade, etc.)
+   - Confirme que o código está enviando dados para a UART
