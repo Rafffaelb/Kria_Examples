@@ -200,7 +200,21 @@ connect_bd_net $rst_peripheral [get_bd_pins axi_gpio_out/s_axi_aresetn]
 connect_bd_net $rst_peripheral [get_bd_pins axi_gpio_in/s_axi_aresetn]
 
 # =========================================================================================
-# PART 3: FINALIZATION
+# PART 3: CONSTRAINTS
+# =========================================================================================
+
+puts "--- Adding Constraints ---"
+set xdc_file "./adxl345.xdc"
+if { [file exists $xdc_file] } {
+    add_files -fileset constrs_1 -norecurse $xdc_file
+    set_property file_type "XDC" [get_files $xdc_file]
+    puts "Constraints file '$xdc_file' added."
+} else {
+    puts "WARNING: Constraints file '$xdc_file' not found! Implementation may fail."
+}
+
+# =========================================================================================
+# PART 4: FINALIZATION
 # =========================================================================================
 
 puts "--- Validating and Saving Design ---"
