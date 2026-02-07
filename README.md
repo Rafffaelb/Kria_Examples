@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Workflow para Execução dos Exemplos Kria
 
 Este documento descreve o fluxo de trabalho para executar os exemplos Kria, incluindo a geração do design de hardware usando scripts TCL no Vivado e a implementação do software correspondente no Xilinx Vitis.
@@ -152,3 +153,122 @@ Exemplo/
 4. **Nenhuma saída no terminal serial**
    - Verifique as configurações da porta UART (velocidade, paridade, etc.)
    - Confirme que o código está enviando dados para a UART
+=======
+
+# Kria FFT - Hardware & Software Implementation Guide
+# ===================================================
+
+This repository contains the Vivado and Vitis project files for implementing an FFT-based signal processing system on the Kria KR260 Robotics Starter Kit.
+
+## Key Features
+*   **Sensor Interface**: I2C communication with ADXL345 Accelerometer.
+*   **Processing Core**: MicroBlaze Soft Processor for control and data acquisition.
+*   **Hardware Acceleration**: Custom Verilog module for high-speed Power Calculation ($Real^2 + Imag^2$).
+*   **Memory Architecture**: Shared BRAM between MicroBlaze and Zynq MPSoC for data transfer.
+*   **Simulation**: SystemVerilog testbench for verification.
+
+## 1. Directory Structure
+
+| File/Folder | Description |
+| :--- | :--- |
+| `build_kria_fft.tcl` | **Main Script**: Builds the complete Vivado project from scratch. |
+| `add_power_block.tcl` | **Hardware Upgrade**: Adds the custom `mag_squared` module to the Block Design. |
+| `build_bitstream.tcl` | **Implementation**: Runs Synthesis, Implementation, and generates Bitstream/XSA. |
+| `mag_squared.v` | **Custom RTL**: Verilog module for calculating signal power magnitude. |
+| `adxl345.xdc` | **Constraints**: Physical pin entries for PMOD 1 I2C connections. |
+| `sim/tb_system.sv` | **Simulation**: Testbench for verifying system connectivity. |
+| `sw/main.c` | **Software**: MicroBlaze application C code. |
+| `PC_FFT_Test.c` | **PC Verification**: C program to test FFT logic independently on a PC. |
+
+## 2. Hardware Implementation (Vivado)
+
+### Step 1: Build the Base System
+Open Vivado 2025.2, start the Tcl Console, and navigate to this directory:
+```tcl
+cd c:/Users/rafam/Documents/TU_Dresden/Kria_FFT
+source build_kria_fft.tcl
+```
+*   This creates the project, block design, and configures the Zynq/MicroBlaze/BRAM.
+*   **Fix**: Uses SmartConnect to avoid persistent AXI Interconnect bugs.
+
+### Step 2: Add Custom Hardware Acceleration
+Add the custom Power Calculation block:
+```tcl
+source add_power_block.tcl
+```
+*   Adds `mag_squared.v` to the block design.
+*   Adds AXI GPIOs to interface the calculator with MicroBlaze.
+
+### Step 3: Add Constraints
+The ADXL345 sensor is connected to **PMOD 1** (Right Angle Connector, Top Row).
+*   **SCL**: Pin H12 (PMOD 1, Pin 3)
+*   **SDA**: Pin E10 (PMOD 1, Pin 4)
+The `fix_bitstream.tcl` script adds these constraints automatically.
+
+### Step 4: Generate Bitstream & Export Hardware
+Run the full build flow:
+```tcl
+source fix_bitstream.tcl
+```
+*   Synthesizes the design.
+*   Implements (Place & Route).
+*   Generates `system_wrapper.bit`.
+*   Exports `Kria_FFT.xsa` for Vitis.
+
+## 3. Simulation
+To verify the design logic:
+```tcl
+source launch_sim.tcl
+```
+*   Compiles `sim/tb_system.sv`.
+*   Launches Vivado Simulator.
+
+To verify the FFT Mathematics functionality purely on PC:
+```bash
+gcc PC_FFT_Test.c -o fft_test -lm
+./fft_test
+```
+
+## 4. Software Implementation (Vitis)
+
+The MicroBlaze application (`sw/main.c`) reads accelerometer data, processes it, and stores results.
+
+### Using the Hardware Power Calculator
+The custom block is accessed via AXI GPIO.
+*   **GPIO Output (Base Address)**: Send packed 32-bit (16-bit Imag | 16-bit Real).
+*   **GPIO Input (Base Address)**: Read 32-bit Power result.
+
+**Example C Code Snippet:**
+```c
+#include "xgpio.h"
+
+// Instance
+XGpio GpioOut, GpioIn;
+
+// Initialize
+XGpio_Initialize(&GpioOut, XPAR_AXI_GPIO_OUT_DEVICE_ID);
+XGpio_Initialize(&GpioIn, XPAR_AXI_GPIO_IN_DEVICE_ID);
+
+// Processing Loop
+for (int i=0; i<NUM_SAMPLES; i++) {
+    // 1. Pack Data
+    short real = fft_real[i];
+    short imag = fft_imag[i];
+    u32 input_val = (imag << 16) | (real & 0xFFFF);
+    
+    // 2. Hardware Compute
+    XGpio_DiscreteWrite(&GpioOut, 1, input_val);
+    u32 power = XGpio_DiscreteRead(&GpioIn, 1);
+    
+    // 3. Store
+    result_buffer[i] = power;
+}
+```
+
+## 5. Next Steps
+1.  Import `Kria_FFT.xsa` into Vitis Unified IDE.
+2.  Create a "Platform Component" from the XSA.
+3.  Create an "Application Component" using the Platform.
+4.  Copy code from `sw/main.c` (adapt for GPIO usage as shown above).
+5.  Build and Run on Hardware.
+>>>>>>> 8d984af (Initial commit for Kria_FFT Project)
