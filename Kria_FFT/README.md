@@ -1,89 +1,98 @@
 
-# Kria FFT - Hardware & Software Implementation
-# =============================================
+# Kria FFT - Hardware & Software Acceleration System
+# ==================================================
 
-This project implements an FFT-based signal processing system on the Kria KR260 Robotics Starter Kit. It features hardware acceleration for power calculation and extensive data handling between the Processing System (PS) and Programmable Logic (PL).
+This project implements a high-performance **FFT-based signal processing system** on the Xilinx Kria KR260 Robotics Starter Kit. 
 
-## Key Features
-*   **Sensor Interface**: I2C communication with ADXL345 Accelerometer.
-*   **Processing Core**: MicroBlaze Soft Processor for control and data acquisition.
-*   **Hardware Acceleration**: Custom Verilog module (`mag_squared.v`) for high-speed Power Calculation ($Real^2 + Imag^2$).
-*   **Memory Architecture**: Shared BRAM between MicroBlaze and Zynq MPSoC.
-*   **Simulation**: SystemVerilog testbench for verification.
+It upgrades the standard "Processor-Only" approach by offloading the heavy computational tasks (FFT and Power Calculation) to a dedicated **Hardware Acceleration Pipeline** in the FPGA fabric, orchestrated by a MicroBlaze Soft Processor and monitored by the Zynq MPSoC.
 
-## 1. Directory Structure
+![System Architecture](kria_fft_architecture_hq.png)
+
+## System Architecture
+
+The design uses a **Memory-Centric Data Flow** that decouples data acquisition from processing, allowing for maximum throughput.
+
+### 1. Control Plane (MicroBlaze)
+*   **Role**: The "Conductor" of the orchestra.
+*   **tasks**:
+    *   Configures the Peripherals (I2C, DMA, Interrupt Controller).
+    *   Acquires sensor data (ADXL345) via I2C.
+    *   **Buffers data** into Shared BRAM (Port A).
+    *   **Commands the DMA** to start processing.
+    *   Signals the PS when results are ready.
+
+### 2. High-Speed Data Plane (Hardware Pipeline)
+*   **Role**: The "Heavy Lifter".
+*   **DMA (Direct Memory Access)**: Moves data between BRAM and the Streaming Pipeline without using processor cycles.
+*   **Xilinx FFT IP**: Performs a streaming Fast Fourier Transform.
+*   **Custom Power Block (`mag_squared.v`)**: Calculates the Power Magnitude ($Real^2 + Imag^2$) in hardware, pipelined with the FFT.
+
+### 3. Monitoring Plane (Zynq MPSoC / PS)
+*   **Role**: The "Consumer" / Application Layer.
+*   **Tasks**:
+    *   Polls the Shared BRAM for a "Ready" flag from the MicroBlaze.
+    *   Reads the final frequency-domain results from BRAM (Port B).
+    *   Performs high-level application logic (e.g., peak detection, logging, network streaming).
+
+## Data Flow Sequence
+
+The system operates in a continuously looping **10-Step Sequence**:
+
+1.  **Acquisition**: Sensor -> I2C -> MicroBlaze.
+2.  **Buffering**: MicroBlaze writes samples to **Shared BRAM (Port A)**.
+3.  **Command**: MicroBlaze commands the **AXI DMA** (via AXI-Lite) to start a transfer.
+4.  **Fetch**: DMA reads the samples from **Shared BRAM (Port B)** (MM2S Channel).
+5.  **Stream**: DMA streams samples to the **FFT IP**.
+6.  **Transform**: FFT IP outputs Real/Imag frequency components.
+7.  **Power Calc**: Custom block computes Magnitude ($Re^2 + Im^2$).
+8.  **Write Back**: DMA writes the results back to **Shared BRAM (Port B)** (S2MM Channel).
+9.  **Interrupt**: DMA signals "Done" to MicroBlaze via Interrupt Controller.
+10. **Handoff**: MicroBlaze sets a flag in BRAM; Zynq PS reads the result.
+
+## Directory Structure
 
 | File | Description |
 | :--- | :--- |
-| `build_kria_fft.tcl` | **Main Build Script**: Creates the Vivado project, Block Design, and configuration. |
-| `add_power_block.tcl` | **Hardware Upgrade**: Adds the custom `mag_squared` RTL module to the Block Design. |
-| `build_bitstream.tcl` | **Implementation**: Runs Synthesis, Implementation, and Export Hardware (XSA). |
-| `mag_squared.v` | **Custom RTL**: Verilog module for calculating signal power magnitude. |
-| `adxl345.xdc` | **Constraints**: Physical pin entries for PMOD 1 I2C connections. |
-| `sim/tb_system.sv` | **Simulation**: Testbench for verifying system connectivity. |
-| `sw/main.c` | **Software**: MicroBlaze C application code. |
-| `PC_FFT_Test.c` | **Verification**: Standalone C program to test FFT mathematics on a PC. |
+| `build_complete_system.tcl` | **Master Build Script**: Creates the entire Vivado project, Block Design (FFT+DMA+MicroBlaze), and bitstream. |
+| `server_build.tcl` | **Headless Build**: Script to run synthesis/implementation on a remote server/CI pipeline. |
+| `mag_squared.v` | **RTL Core**: Custom Verilog module for hardware power calculation. |
+| `sw/main_mb.c` | **MicroBlaze App**: Controls acquisition and DMA orchestration. |
+| `sw/main_ps.c` | **Zynq PS App**: Consumes and displays the final results. |
+| `adxl345.xdc` | **Constraints**: Pin definitions for the PMOD I2C interface. |
+| `generate_diagram.py` | **Documentation**: Python script to generate the architecture diagram. |
 
-## 2. Hardware Build Instructions (Vivado)
+## Quick Start (Hardware Build)
 
-### Step 1: Create the Base System
-1.  Open **Vivado 2025.2**.
-2.  In the Tcl Console, navigate to this `Kria_FFT` folder.
-3.  Run the main build script:
-    ```tcl
-    source build_kria_fft.tcl
-    ```
-    *This creates the project, configures the Zynq MPSoC, instantiates the MicroBlaze, and sets up the Shared BRAM with SmartConnect.*
-
-### Step 2: Add Hardware Acceleration
-1.  Run the script to add the custom power calculation block:
-    ```tcl
-    source add_power_block.tcl
-    ```
-    *This imports `mag_squared.v`, adds it to the Block Design, and connects it to the MicroBlaze via AXI GPIO.*
-
-### Step 3: Synthesis & Implementation
-1.  Run the full build flow script:
-    ```tcl
-    source fix_bitstream.tcl
-    ```
-    *This script applies the pin constraints (`adxl345.xdc`), runs synthesis and implementation, generates the bitstream, and exports the `Kria_FFT.xsa` hardware platform.*
-
-## 3. Simulation
-
-### Hardware Simulation
-To verify the connectivity of the entire system (Zynq + MicroBlaze + Logic):
+### 1. Build the Design (Vivado)
+Open Vivado 2025.2 Tcl Console and run:
 ```tcl
-source launch_sim.tcl
+cd Kria_FFT
+source build_complete_system.tcl
 ```
-*This compiles the `sim/tb_system.sv` testbench and launches the Vivado Simulator.*
+*   This will create the project, add all IPs (FFT, DMA, MicroBlaze), connect the custom RTL, and launch synthesis.*
 
-### Algorithm Verification
-To verify the FFT logic independently on your PC (pure C code):
+**(Optional) Headless Build:**
+To build on a server without opening the GUI:
 ```bash
-gcc PC_FFT_Test.c -o fft_test -lm
-./fft_test
+vivado -mode batch -source server_build.tcl
 ```
 
-## 4. Software Implementation (Vitis)
+### 2. Run the Software (Vitis)
+You will need to create **Two Applications** in Vitis 2025.2:
 
-The software application (`sw/main.c`) runs on the MicroBlaze processor.
+1.  **Platform**: Create a platform from the exported `.xsa` (Hardware).
+2.  **App 1 (MicroBlaze)**:
+    *   Select the `microblaze_0` processor.
+    *   Import `sw/main_mb.c` as the source.
+3.  **App 2 (Zynq PS)**:
+    *   Select the `psu_cortexa53_0` processor.
+    *   Import `sw/main_ps.c` as the source.
 
-### Application Workflow
-1.  **Initialize**: Setup AXI GPIO, IIC, and BRAM Controller.
-2.  **Acquire**: Read X, Y, Z acceleration data from the ADXL345 sensor via I2C.
-3.  **Process**:
-    *   Perform FFT on the Z-axis data.
-    *   **Hardware Offload**: Send Real/Imag parts to the custom hardware block via GPIO.
-    *   **Read Result**: Read the computed Power Magnitude back from GPIO.
-4.  **Store**: Write the final results into the Shared BRAM for the Zynq MPSoC to access.
+**Run Order**:
+1.  Program the Bitstream.
+2.  Launch the MicroBlaze App (starts acquisition loop).
+3.  Launch the PS App (starts monitoring output).
 
-### Hardware Interface Details
-*   **GPIO Output**: Writes packed 32-bit data (Upper 16: Imag, Lower 16: Real).
-*   **GPIO Input**: Reads 32-bit Power Magnitude result.
-*   **Shared BRAM**: Standard memory mapped interface.
-
-## Requirements
-*   **Board**: Kria KR260 Robotics Starter Kit.
-*   **Sensor**: ADXL345 Accelerometer connected to **PMOD 1**.
-*   **Tools**: Xilinx Vivado & Vitis 2025.2.
+## Hardware Requirements
+*   **Board**: Xilinx Kria KR260 Robotics Starter Kit.
+*   **Sensor**: Analog Devices ADXL345 (PMOD Interface).
