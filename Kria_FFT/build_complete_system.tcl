@@ -151,53 +151,155 @@ make_bd_intf_pins_external [get_bd_intf_pins axi_iic_0/IIC]
 set_property name "adxl345_iic" [get_bd_intf_ports IIC_0]
 
 # =========================================================================================
-# PART 2: CUSTOM POWER BLOCK INTEGRATION
+# PART 2: HARDWARE ACCELERATION (FFT + DMA + CUSTOM BLOCK)
 # =========================================================================================
 
-puts "--- Adding Custom Power Calculation Block ---"
+puts "--- Adding Hardware Acceleration Cores ---"
 
-# 1. Add Source File
+# 1. Add Source File (Custom Power Block - Streaming Version)
 set rtl_file "./mag_squared.v"
 if { [file exists $rtl_file] } {
     add_files -norecurse $rtl_file
     set_property file_type "Verilog" [get_files $rtl_file]
 } else {
-    puts "Error: RTL file not found! Please ensure 'mag_squared.v' is in the current directory."
+    puts "Error: RTL file not found!"
     return
 }
-
-# 2. Add RTL Module Reference
 create_bd_cell -type module -reference mag_squared power_calc_0
 
-# 3. Add AXI GPIOs
-# GPIO OUT: 32-bit (Data In to Module)
-set gpio_out [create_bd_cell -type ip -vlnv xilinx.com:ip:axi_gpio axi_gpio_out]
+# 2. Add Xilinx FFT IP (xfft)
+# Configure for Pipelined Streaming I/O, Output Order Natural
+set xfft [create_bd_cell -type ip -vlnv xilinx.com:ip:xfft xfft_0]
 set_property -dict [list \
-    CONFIG.C_ALL_OUTPUTS {1} \
-    CONFIG.C_GPIO_WIDTH {32} \
-] $gpio_out
+    CONFIG.transform_length {1024} \
+    CONFIG.target_clock_frequency {100} \
+    CONFIG.implementation_options {Pipelined_Streaming_IO} \
+    CONFIG.data_format {Fixed_Point} \
+    CONFIG.input_width {16} \
+    CONFIG.phase_factor_width {16} \
+    CONFIG.scaling_options {Unscaled} \
+    CONFIG.rounding_modes {Truncation} \
+    CONFIG.output_ordering {Natural_Order} \
+    CONFIG.throttle_scheme {NonRealTime} \
+] $xfft
 
-# GPIO IN: 32-bit (Power Out from Module)
-set gpio_in [create_bd_cell -type ip -vlnv xilinx.com:ip:axi_gpio axi_gpio_in]
+# 3. Add AXI DMA
+# Simple Mode (Scatter Gather Disabled), Width matching our data (32-bit)
+set dma [create_bd_cell -type ip -vlnv xilinx.com:ip:axi_dma axi_dma_0]
 set_property -dict [list \
-    CONFIG.C_ALL_INPUTS {1} \
-    CONFIG.C_GPIO_WIDTH {32} \
-] $gpio_in
+    CONFIG.c_include_sg {0} \
+    CONFIG.c_sg_include_stscntrl_strm {0} \
+    CONFIG.c_include_mm2s {1} \
+    CONFIG.c_include_s2mm {1} \
+    CONFIG.c_addr_width {32} \
+] $dma
 
-# 4. Connect GPIO Ports to Module Ports
-connect_bd_net [get_bd_pins axi_gpio_out/gpio_io_o] [get_bd_pins power_calc_0/data_in]
-connect_bd_net [get_bd_pins power_calc_0/power_out] [get_bd_pins axi_gpio_in/gpio_io_i]
+# 4. Connectivity: Memory -> DMA -> FFT -> PowerCalc -> DMA -> Memory
+# -------------------------------------------------------------------
 
-# 5. Connect AXI Interface to SmartConnect (M03 & M04)
-# We already set NUM_MI to 5 in Part 1
-connect_bd_intf_net [get_bd_intf_pins smc_mb/M03_AXI] [get_bd_intf_pins axi_gpio_out/S_AXI]
-connect_bd_intf_net [get_bd_intf_pins smc_mb/M04_AXI] [get_bd_intf_pins axi_gpio_in/S_AXI]
+# Connect Clocks & Resets (Global System Clock)
+connect_bd_net $clk_src [get_bd_pins xfft_0/aclk]
+connect_bd_net $clk_src [get_bd_pins axi_dma_0/s_axi_lite_aclk]
+connect_bd_net $clk_src [get_bd_pins axi_dma_0/m_axi_mm2s_aclk]
+connect_bd_net $clk_src [get_bd_pins axi_dma_0/m_axi_s2mm_aclk]
+connect_bd_net $clk_src [get_bd_pins power_calc_0/aclk]
 
-# 6. Connect Clocks & Resets
-connect_bd_net $clk_src [get_bd_pins axi_gpio_out/s_axi_aclk]
-connect_bd_net $clk_src [get_bd_pins axi_gpio_in/s_axi_aclk]
-connect_bd_net $rst_peripheral [get_bd_pins axi_gpio_out/s_axi_aresetn]
-connect_bd_net $rst_peripheral [get_bd_pins axi_gpio_in/s_axi_aresetn]
+# Shared Reset
+connect_bd_net $rst_peripheral [get_bd_pins axi_dma_0/axi_resetn]
+connect_bd_net $rst_peripheral [get_bd_pins power_calc_0/aresetn]
+# FFT uses aresetn (Active Low)
+connect_bd_net $rst_peripheral [get_bd_pins xfft_0/aresetn]
+
+# DATA PATH (Streaming)
+# ---------------------
+# We use explicit pin-level connections to avoid interface compatibility issues
+
+# 1. DMA MM2S (Read from Ram) -> FFT Slave
+# TDATA
+connect_bd_net [get_bd_pins axi_dma_0/m_axis_mm2s_tdata] [get_bd_pins xfft_0/s_axis_data_tdata]
+# TVALID
+connect_bd_net [get_bd_pins axi_dma_0/m_axis_mm2s_tvalid] [get_bd_pins xfft_0/s_axis_data_tvalid]
+# TLAST
+connect_bd_net [get_bd_pins axi_dma_0/m_axis_mm2s_tlast] [get_bd_pins xfft_0/s_axis_data_tlast]
+# TREADY
+connect_bd_net [get_bd_pins xfft_0/s_axis_data_tready] [get_bd_pins axi_dma_0/m_axis_mm2s_tready]
+# Note: DMA provides TKEEP, but FFT doesn't use it. We ignore it here.
+
+# 2. FFT Master -> PowerCalc Slave
+# TDATA
+connect_bd_net [get_bd_pins xfft_0/m_axis_data_tdata] [get_bd_pins power_calc_0/s_axis_tdata]
+# TVALID
+connect_bd_net [get_bd_pins xfft_0/m_axis_data_tvalid] [get_bd_pins power_calc_0/s_axis_tvalid]
+# TLAST
+connect_bd_net [get_bd_pins xfft_0/m_axis_data_tlast] [get_bd_pins power_calc_0/s_axis_tlast]
+# TREADY
+connect_bd_net [get_bd_pins power_calc_0/s_axis_tready] [get_bd_pins xfft_0/m_axis_data_tready]
+
+# Handle TKEEP for PowerCalc Input
+# FFT doesn't output TKEEP, but PowerCalc needs an input to pass through to DMA.
+# We tie it to all 1s (0xF for 32-bit/4-byte) to indicate all bytes valid.
+set const_keep [create_bd_cell -type ip -vlnv xilinx.com:ip:xlconstant const_keep]
+set_property CONFIG.CONST_VAL {15} $const_keep
+set_property CONFIG.CONST_WIDTH {4} $const_keep
+connect_bd_net [get_bd_pins const_keep/dout] [get_bd_pins power_calc_0/s_axis_tkeep]
+
+# 3. PowerCalc Master -> DMA S2MM (Write to Ram)
+# TDATA
+connect_bd_net [get_bd_pins power_calc_0/m_axis_tdata] [get_bd_pins axi_dma_0/s_axis_s2mm_tdata]
+# TKEEP (Passed through from constant)
+connect_bd_net [get_bd_pins power_calc_0/m_axis_tkeep] [get_bd_pins axi_dma_0/s_axis_s2mm_tkeep]
+# TVALID
+connect_bd_net [get_bd_pins power_calc_0/m_axis_tvalid] [get_bd_pins axi_dma_0/s_axis_s2mm_tvalid]
+# TLAST
+connect_bd_net [get_bd_pins power_calc_0/m_axis_tlast] [get_bd_pins axi_dma_0/s_axis_s2mm_tlast]
+# TREADY
+connect_bd_net [get_bd_pins axi_dma_0/s_axis_s2mm_tready] [get_bd_pins power_calc_0/m_axis_tready]
+
+# 4. FFT Configuration (Tie Low/Fixed)
+# We need to drive s_axis_config_tvalid and tdata to defaults (0)
+set const_config [create_bd_cell -type ip -vlnv xilinx.com:ip:xlconstant const_config]
+set_property CONFIG.CONST_VAL {0} $const_config
+set_property CONFIG.CONST_WIDTH {1} $const_config
+
+# Connect val ('0') to tvalid.
+# Note: Some FFT configs require tdata to be driven too even if 0.
+# Let's verify width. If width is > 1 on config_tdata, we might need a wider constant.
+# For standard Unscaled, Natural order, config path might be minimal.
+connect_bd_net [get_bd_pins const_config/dout] [get_bd_pins xfft_0/s_axis_config_tvalid]
+
+# Drive tdata with 0s as well just to be safe (prevent X propagation)
+# We create a 16-bit zero constant (safe upper bound for config, usually 8-24 bits)
+set const_zeros [create_bd_cell -type ip -vlnv xilinx.com:ip:xlconstant const_zeros]
+set_property CONFIG.CONST_VAL {0} $const_zeros
+set_property CONFIG.CONST_WIDTH {16} $const_zeros
+connect_bd_net [get_bd_pins const_zeros/dout] [get_bd_pins xfft_0/s_axis_config_tdata]
+
+# CONTROL PATH (AXI Lite)
+# -----------------------
+
+# Reconfigure smc_mb (for MB -> Peripherals)
+# MB needs to see: IIC, BRAM_CTRL, INTC, DMA_LITE. Total 4.
+set_property CONFIG.NUM_MI {4} $smc_mb
+connect_bd_intf_net [get_bd_intf_pins smc_mb/M03_AXI] [get_bd_intf_pins axi_dma_0/S_AXI_LITE]
+
+# Reconfigure smc_ps (for Masters -> Ram)
+# Zynq, DMA_MM2S, DMA_S2MM all need to access Shared BRAM.
+# Currently smc_ps is: Zynq -> BRAM.
+# We set NUM_SI to 3: S00(Zynq), S01(DMA_MM2S), S02(DMA_S2MM)
+set_property CONFIG.NUM_SI {3} $smc_ps
+
+# Connect DMA Masters to SmartConnect Slaves
+connect_bd_intf_net [get_bd_intf_pins axi_dma_0/M_AXI_MM2S] [get_bd_intf_pins smc_ps/S01_AXI]
+connect_bd_intf_net [get_bd_intf_pins axi_dma_0/M_AXI_S2MM] [get_bd_intf_pins smc_ps/S02_AXI]
+
+# Clocks/Resets for new SMC ports
+# Explicitly connect clock to all SI slots on smc_ps to avoid validation warnings
+connect_bd_net $clk_src [get_bd_pins smc_ps/aclk]
+# (Often aclk1, s01_aclk etc exist depending on config, but SmartConnect usually collapses to one aclk if not using separate clocks)
+# Let's try connecting to specific pins if they exist, or just 'aclk' which usually drives all.
+
+
+puts "Hardware Acceleration Blocks (FFT + DMA) Added."
 
 # =========================================================================================
 # PART 3: CONSTRAINTS
