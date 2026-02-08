@@ -21,127 +21,141 @@ except ImportError:
     exit(1)
 
 def create_kria_fft_diagram():
-    # Initialize Digraph with high resolution and professional settings
+    # Initialize Digraph
     dot = Digraph(comment='Kria FFT Architecture', format='png')
     dot.attr(dpi='300')             # High Resolution
     dot.attr(rankdir='LR')          # Left-to-Right layout
-    dot.attr(splines='polyline')    # Neater edges than 'ortho'
-    dot.attr(ranksep='1.2')         # More space between columns
-    dot.attr(nodesep='0.8')         # More space between nodes
+    dot.attr(splines='polyline')    # Neater edges
+    dot.attr(ranksep='1.8')         # WIDER COLUMNS
+    dot.attr(nodesep='1.0')         # MORE SPACE BETWEEN NODES
     dot.attr(bgcolor='white')
     
-    # Default Node Style
-    dot.attr('node', 
-             shape='box', 
-             style='filled,rounded', # Rounded corners
-             fontname='Helvetica', 
-             fontsize='12',
-             penwidth='1.5',
-             margin='0.2,0.1')
-             
-    # Default Edge Style
-    dot.attr('edge', 
-             fontname='Helvetica', 
-             fontsize='10',
-             penwidth='1.2',
-             arrowsize='0.8')
+    # Global Font Settings
+    dot.attr('node', fontname='Arial', fontsize='16')
+    dot.attr('edge', fontname='Arial', fontsize='14', penwidth='2.0', arrowsize='1.2')
 
     # Color Palette
-    c_ps = '#ffebee'      # Red-ish (Zynq)
-    c_mb = '#e3f2fd'      # Blue-ish (Control)
-    c_mem = '#e0f2f1'     # Teal-ish (Memory)
-    c_acc = '#fff8e1'     # Yellow-ish (Acceleration)
-    c_periph = '#f3e5f5'  # Purple-ish (IO)
+    c_ps = '#ffebee'      # Red-ish
+    c_mb = '#e3f2fd'      # Blue-ish
+    c_mem = '#e0f2f1'     # Teal-ish
+    c_acc = '#fffde7'     # Yellow-ish
+    c_periph = '#f3e5f5'  # Purple-ish
 
     # --- Processing System (PS) ---
     with dot.subgraph(name='cluster_ps') as c:
-        c.attr(label='Processing System (PS)', fontname='Helvetica-Bold', fontsize='14', style='dashed', bgcolor='#fafafa', pencolor='#bdbdbd')
-        c.node('Zynq', 'Zynq UltraScale+\nMPSoC (Cortex-A53)\n[AXI Master]', fillcolor=c_ps, color='#e57373')
+        c.attr(label='Processing System (PS)', fontsize='20', style='dashed', bgcolor='#fafafa', pencolor='#bdbdbd')
+        # HTML Label for Rich Text
+        lbl = '''<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">
+                 <TR><TD><B>Zynq UltraScale+</B></TD></TR>
+                 <TR><TD>Application Core</TD></TR>
+                 <TR><TD><I>(Monitor App)</I></TD></TR>
+                 </TABLE>>'''
+        c.node('Zynq', lbl, shape='component', fillcolor=c_ps, color='#e57373', height='1.5')
 
     # --- Control Subsystem (PL) ---
     with dot.subgraph(name='cluster_control') as c:
-        c.attr(label='Control Subsystem (MicroBlaze)', fontname='Helvetica-Bold', fontsize='14', style='dashed', bgcolor='#f5faff', pencolor='#90caf9')
-        c.node('MicroBlaze', 'MicroBlaze\nSoft Processor', fillcolor=c_mb, color='#64b5f6')
-        c.node('SMC_MB', 'AXI SmartConnect\n(Control Interconnect)', shape='octagon', fillcolor='#ffffff', color='#64b5f6', style='dashed,rounded')
-        c.node('INTC', 'Interrupt\nController', fillcolor=c_mb, color='#64b5f6')
+        c.attr(label='Control Plane (MicroBlaze)', fontsize='20', style='dashed', bgcolor='#f5faff', pencolor='#90caf9')
+        
+        lbl_mb = '''<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">
+                    <TR><TD><B>MicroBlaze</B></TD></TR>
+                    <TR><TD>Soft Processor</TD></TR>
+                    <TR><TD><I>(Controller App)</I></TD></TR>
+                    </TABLE>>'''
+        c.node('MicroBlaze', lbl_mb, shape='box', style='filled,rounded', fillcolor=c_mb, color='#64b5f6', height='1.2')
+        
+        c.node('SMC_MB', 'AXI SmartConnect\n(Control)', shape='octagon', fillcolor='white', color='#64b5f6', style='dashed,filled')
+        c.node('INTC', 'Interrupt\nController', shape='box', style='filled,rounded', fillcolor=c_mb, color='#64b5f6')
 
     # --- Acceleration Pipeline ---
     with dot.subgraph(name='cluster_accel') as c:
-        c.attr(label='Hardware Acceleration Pipeline', fontname='Helvetica-Bold', fontsize='14', style='dashed', bgcolor='#fffde7', pencolor='#fff176')
+        c.attr(label='Hardware Acceleration Pipeline', fontsize='20', style='dashed', bgcolor='#fffde7', pencolor='#fff176')
         
-        c.node('DMA', 'AXI DMA\n(Direct Memory Access)', fillcolor=c_acc, color='#ffd54f')
+        lbl_dma = '''<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">
+                     <TR><TD><B>AXI DMA</B></TD></TR>
+                     <TR><TD>Direct Memory Access</TD></TR>
+                     </TABLE>>'''
+        c.node('DMA', lbl_dma, shape='box', style='filled,rounded', fillcolor=c_acc, color='#ffd54f', height='1.2')
         
-        # Highlighted FFT and Custom Block
-        c.node('FFT', 'Xilinx FFT IP\n(Pipelined Streaming)', fillcolor='#fff9c4', color='#fbc02d', penwidth='2.0')
-        c.node('PowerCalc', 'Custom Power Calc\n(mag_squared.v)', fillcolor='#ffecb3', color='#ff6f00', penwidth='2.0', shape='component')
+        lbl_fft = '''<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">
+                     <TR><TD><B>Xilinx FFT</B></TD></TR>
+                     <TR><TD>Streaming Core</TD></TR>
+                     </TABLE>>'''
+        c.node('FFT', lbl_fft, shape='box', style='filled,rounded', fillcolor='#fff9c4', color='#fbc02d', penwidth='3.0', height='1.2')
+        
+        lbl_pow = '''<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">
+                     <TR><TD><B>Power Calc</B></TD></TR>
+                     <TR><TD>Custom RTL</TD></TR>
+                     <TR><TD><I>(mag_squared.v)</I></TD></TR>
+                     </TABLE>>'''
+        c.node('PowerCalc', lbl_pow, shape='component', style='filled', fillcolor='#ffecb3', color='#ff6f00', penwidth='3.0', height='1.2')
 
     # --- Memory Subsystem ---
     with dot.subgraph(name='cluster_mem') as c:
-        c.attr(label='Shared Memory Subsystem', fontname='Helvetica-Bold', fontsize='14', style='dashed', bgcolor='#e0f2f1', pencolor='#80cbc4')
+        c.attr(label='Shared Memory', fontsize='20', style='dashed', bgcolor='#e0f2f1', pencolor='#80cbc4')
         
-        c.node('SMC_PS', 'AXI SmartConnect\n(High Performance)', shape='octagon', fillcolor='#ffffff', color='#4db6ac', style='dashed,rounded')
-        c.node('BRAM_Ctrl_A', 'BRAM Ctrl A\n(Port A)', fontsize='10', fillcolor='#ffffff', color='#80cbc4')
-        c.node('BRAM_Ctrl_B', 'BRAM Ctrl B\n(Port B)', fontsize='10', fillcolor='#ffffff', color='#80cbc4')
-        c.node('BRAM', 'Shared BRAM\n(True Dual Port)', shape='cylinder', fillcolor='#b2dfdb', color='#009688', height='1.0')
+        c.node('SMC_PS', 'AXI SmartConnect\n(High Performance)', shape='octagon', fillcolor='white', color='#4db6ac', style='dashed,filled')
+        c.node('BRAM_Ctrl_A', 'BRAM Port A\n(MicroBlaze)', fontsize='14', fillcolor='white', color='#80cbc4')
+        c.node('BRAM_Ctrl_B', 'BRAM Port B\n(DMA / Zynq)', fontsize='14', fillcolor='white', color='#80cbc4')
+        
+        lbl_bram = '''<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">
+                      <TR><TD><B>Shared BRAM</B></TD></TR>
+                      <TR><TD>True Dual Port</TD></TR>
+                      <TR><TD><I>Data Buffer</I></TD></TR>
+                      </TABLE>>'''
+        c.node('BRAM', lbl_bram, shape='cylinder', style='filled', fillcolor='#b2dfdb', color='#009688', height='1.5', width='2.0')
 
     # --- Peripherals ---
     with dot.subgraph(name='cluster_periph') as c:
-        c.attr(label='External I/O', fontname='Helvetica-Bold', fontsize='14', style='dashed', bgcolor='#f3e5f5', pencolor='#ce93d8')
-        c.node('IIC', 'AXI IIC', fillcolor=c_periph, color='#ba68c8')
-        c.node('Sensor', 'ADXL345\nAccelerometer', shape='ellipse', fillcolor='#e1bee7', color='#8e24aa')
+        c.attr(label='I/O', fontsize='20', style='dashed', bgcolor='#f3e5f5', pencolor='#ce93d8')
+        c.node('IIC', 'AXI IIC', shape='box', style='filled,rounded', fillcolor=c_periph, color='#ba68c8')
+        c.node('Sensor', 'ADXL345\nAccelerometer', shape='ellipse', style='filled', fillcolor='#e1bee7', color='#8e24aa', height='1.0')
 
     # --- Connections (Story Flow) ---
     
-    # Color Scheme for Paths
-    c_control = '#90caf9'   # Light Blue (Config/Status)
-    c_data_aq = '#ba68c8'   # Purple (Acquisition)
-    c_data_proc = '#ef6c00' # Orange (High Speed Processing)
+    # 1. ACQUISITION
+    dot.edge('Sensor', 'IIC', label='1. I2C Data', color='#8e24aa', penwidth='3.0', dir='back')
+    dot.edge('IIC', 'SMC_MB', color='#8e24aa', penwidth='2.0', dir='back')
+    dot.edge('SMC_MB', 'MicroBlaze', label='2. Read', color='#8e24aa', penwidth='2.0', dir='back')
     
-    # 1. ACQUISITION PHASE
-    # Sensor -> IIC -> MicroBlaze -> BRAM
-    dot.edge('Sensor', 'IIC', label='1. I2C Data', color=c_data_aq, penwidth='2.0', dir='back')
-    dot.edge('IIC', 'SMC_MB', color=c_data_aq, penwidth='1.5', dir='back') # Data flows UP to MB
-    dot.edge('SMC_MB', 'MicroBlaze', label='2. Read Samples', color=c_data_aq, penwidth='1.5', dir='back')
-    
-    dot.edge('MicroBlaze', 'SMC_MB', color=c_data_aq) # MB writes back out
-    dot.edge('SMC_MB', 'BRAM_Ctrl_A', label='3. Write Buffer', color=c_data_aq, penwidth='2.0')
-    dot.edge('BRAM_Ctrl_A', 'BRAM', color=c_data_aq, penwidth='2.0')
+    dot.edge('MicroBlaze', 'SMC_MB', color='#8e24aa', penwidth='2.0') 
+    dot.edge('SMC_MB', 'BRAM_Ctrl_A', label='3. Write Buffer', color='#8e24aa', penwidth='3.0')
+    dot.edge('BRAM_Ctrl_A', 'BRAM', color='#8e24aa', penwidth='3.0')
 
     # 2. CONTROL HAND-OFF
-    # MicroBlaze tells DMA to start
-    # We make this part of the numbered sequence now
-    dot.edge('SMC_MB', 'DMA', label='4. Start Transfer\n(AXI-Lite)', color=c_control, penwidth='2.0', style='dashed')
+    dot.edge('SMC_MB', 'DMA', label='4. Start DMA', color='#1565c0', penwidth='2.5', style='dashed')
 
     # 3. PROCESSING PHASE (DMA)
-    # BRAM -> DMA -> FFT -> Mag -> DMA -> BRAM
-    dot.edge('BRAM', 'BRAM_Ctrl_B', color=c_data_proc, penwidth='2.0', dir='both')
-    dot.edge('BRAM_Ctrl_B', 'SMC_PS', color=c_data_proc, penwidth='2.0', dir='both')
+    dot.edge('BRAM', 'BRAM_Ctrl_B', color='#ef6c00', penwidth='3.0', dir='both')
+    dot.edge('BRAM_Ctrl_B', 'SMC_PS', color='#ef6c00', penwidth='3.0', dir='both')
     
     # Read Path
-    dot.edge('SMC_PS', 'DMA', label='5. DMA Fetch\n(MM2S)', color=c_data_proc, penwidth='2.0', dir='back')
-    dot.edge('DMA', 'FFT', label='6. Stream Samples', color=c_data_proc, penwidth='2.5')
+    dot.edge('SMC_PS', 'DMA', label='5. Fetch', color='#ef6c00', penwidth='3.0', dir='back')
+    dot.edge('DMA', 'FFT', label='6. Samples', color='#ef6c00', penwidth='4.0')
     
     # Pipeline
-    dot.edge('FFT', 'PowerCalc', label='7. FFT Result', color=c_data_proc, penwidth='2.5')
-    dot.edge('PowerCalc', 'DMA', label='8. Power Mag', color=c_data_proc, penwidth='2.5')
+    dot.edge('FFT', 'PowerCalc', label='7. Re/Im', color='#ef6c00', penwidth='4.0')
+    dot.edge('PowerCalc', 'DMA', label='8. Power', color='#ef6c00', penwidth='4.0')
     
     # Write Path
-    dot.edge('DMA', 'SMC_PS', label='9. Write Back\n(S2MM)', color=c_data_proc, penwidth='2.0')
+    dot.edge('DMA', 'SMC_PS', label='9. Write Back', color='#ef6c00', penwidth='3.0')
 
     # 4. BACKGROUND / IRQ
     dot.edge('MicroBlaze', 'SMC_MB', style='invis') 
-    dot.edge('SMC_MB', 'INTC', style='dashed', color=c_control)
+    dot.edge('SMC_MB', 'INTC', style='dashed', color='#90caf9')
     
     # Interrupts
-    dot.edge('DMA', 'INTC', label='10. Done (IRQ)', style='dotted', color='#bdbdbd')
-    dot.edge('INTC', 'MicroBlaze', style='dotted', color='#bdbdbd')
+    dot.edge('DMA', 'INTC', label='10. IRQ', style='dotted', color='#757575')
+    dot.edge('INTC', 'MicroBlaze', style='dotted', color='#757575')
 
-    # Zynq Access (Optional debug path)
-    dot.edge('Zynq', 'SMC_PS', label='Optional Access', style='dashed', color='#bdbdbd')
+    # Zynq Access
+    dot.edge('Zynq', 'SMC_PS', label='Read', style='dashed', color='#bdbdbd')
 
-    # --- Legend / Title ---
-    dot.attr(labelloc='t')
-    dot.attr(label='Kria FFT System Architecture\nHigh-Performance Acceleration Pipeline', fontsize='20', fontname='Helvetica-Bold')
+    # Title
+    lbl_title = '''<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">
+                   <TR><TD><FONT POINT-SIZE="28"><B>Kria FFT System Architecture</B></FONT></TD></TR>
+                   <TR><TD><FONT POINT-SIZE="18">Hardware Acceleration Data Flow</FONT></TD></TR>
+                   </TABLE>>'''
+    dot.attr(label=lbl_title, labelloc='t')
 
     # Render
     output_path = dot.render(filename='kria_fft_architecture_hq', cleanup=True)
