@@ -90,39 +90,51 @@ def create_kria_fft_diagram():
         c.node('IIC', 'AXI IIC', fillcolor=c_periph, color='#ba68c8')
         c.node('Sensor', 'ADXL345\nAccelerometer', shape='ellipse', fillcolor='#e1bee7', color='#8e24aa')
 
-    # --- Connections ---
+    # --- Connections (Story Flow) ---
     
-    # 1. Control Plane (MicroBlaze -> Peripherals)
-    #    Use explicit ports (n/s/e/w) to guide layout
-    dot.edge('MicroBlaze', 'SMC_MB', label='M_AXI_DP', color='#1565c0')
-    dot.edge('SMC_MB', 'IIC', color='#42a5f5')
-    dot.edge('SMC_MB', 'INTC', color='#42a5f5')
-    dot.edge('SMC_MB', 'DMA', label='AXI-Lite\n(Config)', color='#42a5f5', style='dashed')
-    dot.edge('SMC_MB', 'BRAM_Ctrl_A', label='AXI-Lite', color='#42a5f5')
-
-    # 2. Interrupts (Dotted Red)
-    dot.edge('INTC', 'MicroBlaze', label='IRQ', color='#d32f2f', style='dotted', dir='back')
-    dot.edge('IIC', 'INTC', color='#ef5350', style='dotted')
-    dot.edge('DMA', 'INTC', color='#ef5350', style='dotted')
-
-    # 3. Memory Data Path (High Bandwidth)
-    #    Zynq -> BRAM
-    dot.edge('Zynq', 'SMC_PS', label='AXI HPM0', color='#d84315', penwidth='2.0')
-    #    DMA <-> BRAM
-    dot.edge('DMA', 'SMC_PS', label='AXI MM2S/S2MM', color='#d84315', penwidth='2.0')
+    # Color Scheme for Paths
+    c_control = '#90caf9'   # Light Blue (Config/Status)
+    c_data_aq = '#ba68c8'   # Purple (Acquisition)
+    c_data_proc = '#ef6c00' # Orange (High Speed Processing)
     
-    dot.edge('SMC_PS', 'BRAM_Ctrl_B', label='AXI4', color='#00695c')
-    dot.edge('BRAM_Ctrl_B', 'BRAM', label='Port B', color='#00695c')
-    dot.edge('BRAM_Ctrl_A', 'BRAM', label='Port A', color='#00695c')
+    # 1. ACQUISITION PHASE
+    # Sensor -> IIC -> MicroBlaze -> BRAM
+    dot.edge('Sensor', 'IIC', label='1. I2C Data', color=c_data_aq, penwidth='2.0', dir='back')
+    dot.edge('IIC', 'SMC_MB', color=c_data_aq, penwidth='1.5', dir='back') # Data flows UP to MB
+    dot.edge('SMC_MB', 'MicroBlaze', label='2. Read Samples', color=c_data_aq, penwidth='1.5', dir='back')
+    
+    dot.edge('MicroBlaze', 'SMC_MB', color=c_data_aq) # MB writes back out
+    dot.edge('SMC_MB', 'BRAM_Ctrl_A', label='3. Write Buffer', color=c_data_aq, penwidth='2.0')
+    dot.edge('BRAM_Ctrl_A', 'BRAM', color=c_data_aq, penwidth='2.0')
 
-    # 4. Streaming Acceleration Pipeline (The "Cool" Part)
-    #    Use 'same' rank to force straight line if needed, but subgraphs usually handle it.
-    dot.edge('DMA', 'FFT', label='AXIS Stream\n(Samples)', color='#e65100', penwidth='2.5')
-    dot.edge('FFT', 'PowerCalc', label='AXIS Stream\n(Re, Im)', color='#ef6c00', penwidth='2.5')
-    dot.edge('PowerCalc', 'DMA', label='AXIS Stream\n(Power)', color='#f57c00', penwidth='2.5')
+    # 2. PROCESSING PHASE (DMA)
+    # BRAM -> DMA -> FFT -> Mag -> DMA -> BRAM
+    dot.edge('BRAM', 'BRAM_Ctrl_B', color=c_data_proc, penwidth='2.0', dir='both')
+    dot.edge('BRAM_Ctrl_B', 'SMC_PS', color=c_data_proc, penwidth='2.0', dir='both')
+    
+    # Read Path
+    dot.edge('SMC_PS', 'DMA', label='4. Fetch\n(MM2S)', color=c_data_proc, penwidth='2.0', dir='back')
+    dot.edge('DMA', 'FFT', label='5. Stream Samples', color=c_data_proc, penwidth='2.5')
+    
+    # Pipeline
+    dot.edge('FFT', 'PowerCalc', label='6. FFT Result', color=c_data_proc, penwidth='2.5')
+    dot.edge('PowerCalc', 'DMA', label='7. Power Mag', color=c_data_proc, penwidth='2.5')
+    
+    # Write Path
+    dot.edge('DMA', 'SMC_PS', label='8. Write Back\n(S2MM)', color=c_data_proc, penwidth='2.0')
 
-    # 5. External IO
-    dot.edge('IIC', 'Sensor', label='I2C Bus', dir='both', color='#8e24aa', penwidth='1.5')
+    # 3. CONTROL / CONFIG (Background)
+    # MicroBlaze configuration of IP blocks
+    dot.edge('MicroBlaze', 'SMC_MB', style='invis') # Existing structural link
+    dot.edge('SMC_MB', 'DMA', label='Config', style='dashed', color=c_control)
+    dot.edge('SMC_MB', 'INTC', style='dashed', color=c_control)
+    
+    # Interrupts
+    dot.edge('DMA', 'INTC', label='Done', style='dotted', color='#bdbdbd')
+    dot.edge('INTC', 'MicroBlaze', style='dotted', color='#bdbdbd')
+
+    # Zynq Access (Optional debug path)
+    dot.edge('Zynq', 'SMC_PS', label='Optional Access', style='dashed', color='#bdbdbd')
 
     # --- Legend / Title ---
     dot.attr(labelloc='t')
