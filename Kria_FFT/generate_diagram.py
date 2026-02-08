@@ -107,30 +107,33 @@ def create_kria_fft_diagram():
     dot.edge('SMC_MB', 'BRAM_Ctrl_A', label='3. Write Buffer', color=c_data_aq, penwidth='2.0')
     dot.edge('BRAM_Ctrl_A', 'BRAM', color=c_data_aq, penwidth='2.0')
 
-    # 2. PROCESSING PHASE (DMA)
+    # 2. CONTROL HAND-OFF
+    # MicroBlaze tells DMA to start
+    # We make this part of the numbered sequence now
+    dot.edge('SMC_MB', 'DMA', label='4. Start Transfer\n(AXI-Lite)', color=c_control, penwidth='2.0', style='dashed')
+
+    # 3. PROCESSING PHASE (DMA)
     # BRAM -> DMA -> FFT -> Mag -> DMA -> BRAM
     dot.edge('BRAM', 'BRAM_Ctrl_B', color=c_data_proc, penwidth='2.0', dir='both')
     dot.edge('BRAM_Ctrl_B', 'SMC_PS', color=c_data_proc, penwidth='2.0', dir='both')
     
     # Read Path
-    dot.edge('SMC_PS', 'DMA', label='4. Fetch\n(MM2S)', color=c_data_proc, penwidth='2.0', dir='back')
-    dot.edge('DMA', 'FFT', label='5. Stream Samples', color=c_data_proc, penwidth='2.5')
+    dot.edge('SMC_PS', 'DMA', label='5. DMA Fetch\n(MM2S)', color=c_data_proc, penwidth='2.0', dir='back')
+    dot.edge('DMA', 'FFT', label='6. Stream Samples', color=c_data_proc, penwidth='2.5')
     
     # Pipeline
-    dot.edge('FFT', 'PowerCalc', label='6. FFT Result', color=c_data_proc, penwidth='2.5')
-    dot.edge('PowerCalc', 'DMA', label='7. Power Mag', color=c_data_proc, penwidth='2.5')
+    dot.edge('FFT', 'PowerCalc', label='7. FFT Result', color=c_data_proc, penwidth='2.5')
+    dot.edge('PowerCalc', 'DMA', label='8. Power Mag', color=c_data_proc, penwidth='2.5')
     
     # Write Path
-    dot.edge('DMA', 'SMC_PS', label='8. Write Back\n(S2MM)', color=c_data_proc, penwidth='2.0')
+    dot.edge('DMA', 'SMC_PS', label='9. Write Back\n(S2MM)', color=c_data_proc, penwidth='2.0')
 
-    # 3. CONTROL / CONFIG (Background)
-    # MicroBlaze configuration of IP blocks
-    dot.edge('MicroBlaze', 'SMC_MB', style='invis') # Existing structural link
-    dot.edge('SMC_MB', 'DMA', label='Config', style='dashed', color=c_control)
+    # 4. BACKGROUND / IRQ
+    dot.edge('MicroBlaze', 'SMC_MB', style='invis') 
     dot.edge('SMC_MB', 'INTC', style='dashed', color=c_control)
     
     # Interrupts
-    dot.edge('DMA', 'INTC', label='Done', style='dotted', color='#bdbdbd')
+    dot.edge('DMA', 'INTC', label='10. Done (IRQ)', style='dotted', color='#bdbdbd')
     dot.edge('INTC', 'MicroBlaze', style='dotted', color='#bdbdbd')
 
     # Zynq Access (Optional debug path)
